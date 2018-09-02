@@ -12,18 +12,8 @@
  -=-=-=-=-=-=-=-=-=-=-
 */
 // -= О П Ц И И =-
-define("DB_HOST", "localhost"); //
-define("DB_USER", "u0533387_satin"); // u0533387_satin
-define("DB_PASS", "!vipSatin"); // !vipSatin
-define("DB_NAME", "u0533387_test"); // u0533387_vipsatin
-define("YML_URL_KINGSILK", "http://kingsilk-opt.ru/YMLexport.xml");
-define("YML_URL_CLEO", "http://cleo-opt.ru/bitrix/catalog_export/yml_1.php");
-define("IMAGES_PATH", getcwd() . "/www/test.vipsatin.ru/image/"); // end of this constant must be the "/"!!
-define("IMAGE_PATH_PREFIX", "catalog/Products/"); // end of this constant must be the "/"!!
-define("THRESHOLD_SIMILARITY_VALUE", 35); // пороговое значение сходства изображений
-define("IMAGICK_METRIC", Imagick::METRIC_PEAKSIGNALTONOISERATIO); // Метрика сравнения изображений
-define("UNSORTED_CAT_ID", 321);
-define("PRODS_WTH_CAT_NAME_PREFIX_CAT_ID", [59]); // Идентификаторы категорий в наименовании товаров которых, в качестве префикса, должно присутствовать наименование самой категории
+require("config.php");
+
 // Технические настройки скрипта
 header('Content-Type: text/html; charset=utf-8');
 ini_set('memory_limit', '-1');
@@ -288,6 +278,7 @@ $attrs_groups_add_count = 0;
 $attrs_add_count = 0;
 $filts_add_count = 0;
 $cats_add_count = 0;
+var_dump($GLOBALS['cats_idxs']);
 // Функция конвертации групп предложений от поставщика в товар на сайте
 function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 	global $opts_add_count;
@@ -326,9 +317,12 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 		$cat_name_idx = str2idx($cat_name);
 		$is_found_cat = FALSE;
 		// Ищем подходящую категорию
-		if (!array_key_exists($cat_name_idx, $GLOBALS['cats_idxs']))
-			foreach ($GLOBALS['cats_idxs'] as $idx => $cats_group_idx)
+		if (!array_key_exists($cat_name_idx, $GLOBALS['cats_idxs'])){
+			echo 1;
+			foreach ($GLOBALS['cats_idxs'] as $idx => $cats_group_idx){
+				echo 2;
 				if (is_array($cats_group_idx) && array_key_exists($cat_name_idx, $cats_group_idx)){
+					echo 3;
 					$is_found_cat = TRUE;
 					$cat = $GLOBALS['cats'][$GLOBALS['cats_idxs'][$idx][$cat_name_idx]];
 					$prod["cats"][] = $cat;
@@ -336,7 +330,9 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 						&& strpos($cat["name"], $prod["name"]) === FALSE)
 						$prod["name"] = $cat["name"] . " " . $prod["name"];
 				}
-		else{
+			}
+		} else{
+			echo 4;
 			$is_found_cat = TRUE;
 			$cat = $GLOBALS['cats'][$GLOBALS['cats_idxs'][$cat_name_idx]];
 			$prod["cats"][] = $cat;
@@ -344,15 +340,7 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 				$prod["name"] = $cat["name"] . " " . $prod["name"];
 		}
 		if (!$is_found_cat){
-			var_dump("INSERT INTO `oc_category` (`parent_id`,`top`,`column`,`status`,`date_added`,`date_modified`)
-				VALUES (".UNSORTED_CAT_ID.",1,1,0,'".date("Y-m-d H:i:s")."','".date("Y-m-d H:i:s")."')");
-			var_dump(execSQL("INSERT INTO `oc_category` (`parent_id`,`top`,`column`,`status`,`date_added`,`date_modified`)
-				VALUES (".UNSORTED_CAT_ID.",1,1,0,'".date("Y-m-d H:i:s")."','".date("Y-m-d H:i:s")."')"));
 			$cat_id = (string)$GLOBALS["mysqli"]->insert_id;
-			var_dump($cat_id);
-			var_dump("356:
-				INSERT INTO `oc_category_description` (`category_id`,`language_id`,`name`,`description`,`meta_title`,`meta_description`,`meta_keyword`)
-				VALUES (".$cat_id.",1,'".$cat_name."','','".$cat_name."','','');");
 			execSQL("INSERT INTO `oc_category_description` (`category_id`,`language_id`,`name`,`description`,`meta_title`,`meta_description`,`meta_keyword`)
 				VALUES (".$cat_id.",1,'".$cat_name."','','".$cat_name."','','');");
 			execSQL("INSERT INTO `oc_category_path` (`category_id`,`path_id`,`level`)
@@ -604,12 +592,12 @@ printLog(
 	"Compare import and exists data, convert offers group to products:
 	 - products to updating count: " . count($prods2updating) . "
 	 - products to adding count: " . count($prods2adding) . "
-	 - added options count: " . count($opts_add_count) . "
-	 - added options values count: " . count($opts_vals_add_count) . "
-	 - added filters count: " . count($filts_add_count) . "
-	 - added categories count: " . count($cats_add_count) . "
-	 - added attributes groups count: " . count($attrs_groups_add_count) . "
-	 - added attributes count: " . count($attrs_add_count)
+	 - added options count: " . $opts_add_count . "
+	 - added options values count: " . $opts_vals_add_count . "
+	 - added filters count: " . $filts_add_count . "
+	 - added categories count: " . $cats_add_count . "
+	 - added attributes groups count: " . $attrs_groups_add_count . "
+	 - added attributes count: " . $attrs_add_count
 );
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
@@ -752,13 +740,13 @@ foreach ($prods2adding as $prod) {
 }
 printLog(
 	"Products adding completed:
-	 - products added count: " . count($prods_add_count) . "
-	 - relationship products and attributes added count: " . count($prod_attr_add_count) . "
-	 - relationship products and filters added count: " . count($prod_filt_add_count) . "
-	 - relationship products and images added count: " . count($prod_img_add_count) . "
-	 - relationship products and options added count: " . count($prod_opt_add_count) . "
-	 - relationship products and options values added count: " . count($prod_opt_val_add_count) . "
-	 - relationship products and categories added count: " . count($prod_cat_add_count)
+	 - products added count: " . $prods_add_count . "
+	 - relationship products and attributes added count: " . $prod_attr_add_count . "
+	 - relationship products and filters added count: " . $prod_filt_add_count . "
+	 - relationship products and images added count: " . $prod_img_add_count . "
+	 - relationship products and options added count: " . $prod_opt_add_count . "
+	 - relationship products and options values added count: " . $prod_opt_val_add_count . "
+	 - relationship products and categories added count: " . $prod_cat_add_count
 );
 // -=-=-=-=-=-=-=-=-=-=-=-=-
 
@@ -927,13 +915,13 @@ foreach ($prods2updating as $prod) {
 }
 printLog(
 	"Products updating completed:
-	 - products updated count: " . count($prod_upd_count) . "
-	 - relationship products and attributes added count: " . count($prod_attr_add_count) . "
-	 - relationship products and filters added count: " . count($prod_filt_add_count) . "
-	 - relationship products and images added count: " . count($prod_img_add_count) . "
-	 - relationship products and options added count: " . count($prod_opt_add_count) . "
-	 - relationship products and options values added count: " . count($prod_opt_val_add_count) . "
-	 - relationship products and categories added count: " . count($prod_cat_add_count) . "
+	 - products updated count: " . $prod_upd_count . "
+	 - relationship products and attributes added count: " . $prod_attr_add_count . "
+	 - relationship products and filters added count: " . $prod_filt_add_count . "
+	 - relationship products and images added count: " . $prod_img_add_count . "
+	 - relationship products and options added count: " . $prod_opt_add_count . "
+	 - relationship products and options values added count: " . $prod_opt_val_add_count . "
+	 - relationship products and categories added count: " . $prod_cat_add_count . "
 	 - wrong relationship layout and product in product with IDs: " . implode(", ", $prod2layout_wrong) . "
 	 - wrong relationship store and product in product with IDs: " . implode(", ", $prod2store_wrong) . "
 	 - wrong relationship bf filter and product in product with IDs: " . implode(", ", $prod_bf_filter_wrong)

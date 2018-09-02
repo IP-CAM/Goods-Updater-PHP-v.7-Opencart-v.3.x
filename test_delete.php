@@ -1,8 +1,5 @@
 <?php
-define("DB_HOST", "localhost");
-define("DB_USER", "u0533387_satin");
-define("DB_PASS", "!vipSatin");
-define("DB_NAME", "u0533387_test");
+require("config.php");
 function printLog($text) { echo sprintf("[%s] %s", date("Y-m-d H:i:s"), $text) . "\n"; }
 $mysqli=NULL;
 function execSQL($sql, &$mysqli=NULL, $mode="fetch_assoc") {
@@ -133,4 +130,20 @@ var_dump(execSQL("delete A.*
           left join oc_attribute B
             on B.attribute_id=A.attribute_id
          where B.attribute_id is NULL and A.attribute_id is not NULL;"));
+var_dump(execSQL("DELETE FROM oc_category WHERE category_id>".UNSORTED_CAT_ID.";"));
+var_dump(execSQL("delete A.*
+          from oc_category_description A
+          left join oc_category B
+            on B.category_id=A.category_id
+         where B.category_id is NULL and A.category_id is not NULL;"));
+var_dump(execSQL("delete A.*
+          from oc_category_filter A
+          left join oc_category B
+            on B.category_id=A.category_id
+         where B.category_id is NULL and A.category_id is not NULL;"));
+var_dump(execSQL("delete A.*
+          from oc_category_path A
+          left join oc_category B
+            on B.category_id=A.category_id
+         where B.category_id is NULL and A.category_id is not NULL;"));
 ?>
