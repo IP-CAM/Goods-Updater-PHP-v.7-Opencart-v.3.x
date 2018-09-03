@@ -380,7 +380,7 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 					$prod["images_idxs"][$hash] = [
 						"imagick" => $cur_image, 
 						"url" => $picture_url,
-						"is_main" => !count($prod["images_idxs"])
+						"is_main" => !$prod["images_idxs"]
 					];
 				}
 			}
