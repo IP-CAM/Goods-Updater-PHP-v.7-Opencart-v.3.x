@@ -1,35 +1,13 @@
 <?php
-/* -= Developed by a.s.tseluyko@gmail.com =-
- -= А Л Г О Р И Т М =-
- 1. Получение данных от поставщика в формате YML, конвертация в ассоциативный массив, где ключ - md5 hash первой картинки предложения, либо очень похожей на первую картинку, таким образом происходит первичная группировка по одинкаовым и схожим картинкам.
- 2. Для получения возможности сопоставления русского текста после его упрощения, дабы избежать случаев с задвоением пробелов, например, то данные по товарам, атрибутам, категориям, фильтрам, производителям, опциям и значениям опций забираются из БД и превращаются в "поисковые индексы", где индексами является результат функции str2idx (см. ниже), на каждую сущность создаются индексы по ID, в которых хранятся сами данные и отдельные индексы по наименованию и синонимам (если есть), которые хранят индексы ID.
- 3. Сопоставление полученных от поставщика групп предложений и существующих товаров и их опций. Связующее поле здесь product.meta_keyword, в которое через точку с запятой вписываются артикулы предложений, состовляющих опции товара, либо сам товар, если соответствующее предложение для него одно. Это позволяют пользователю вручную перегруппировать предложения по товарам, соответственно, на данном этапе, необходимо учесть изменения от пользователей.
- 4. Конвертация группы предложений в товар. Здесь проверяется:
- 	4.1 Наличие действующей категории для товара, если таковой не найдено, то товар, вместе с категорией поставщика отправляется в выключенную категорию "Неотсортированные при импорте". Позднее менеджер может указать в поле category.meta_keyword у действующей категории, через точку с запятой наименование категорий поставщика, что будет расцениваться как синонимы при следующем поиске действующей категории, что позволит для автоматически сопоставить категории.
- 	4.2 Наличие фильтров и групп фильтров, подходящих к параметрам, имеющимся у каждого из предложений. Отстутствие подходящих к параметрам групп фильтров, последние не создаются, также не создаются и сами фильтры. Если же подхожящая группа фильтров найдена, то при отсутствии подходящих фильтров - они создаются.
-	4.3 Наличие атрибутов и групп атрибутов, опять же подходящих к параметрам. В отличие от фильтров создаются и группы и сами атрибуты, если не были найдены подходящие.
-
- -=-=-=-=-=-=-=-=-=-=-
-*/
+/* -= Developed by a.s.tseluyko@gmail.com =- */
 // -= О П Ц И И =-
 require("config.php");
-
 // Технические настройки скрипта
 header('Content-Type: text/html; charset=utf-8');
 ini_set('memory_limit', '-1');
 // -=-=-=-=-=-=-=-
 
 // -= Функции инкапсуляции технических аспектов =-
-/* Сокращения и опеределния принятые в коде данного скрипта:
-* prod - product
-* opt - option
-* val - value
-* cat - category
-* man - manufacturer
-* idx - index
-* desc - description
-* cur - current 
-* Индекс - строка и или число, привиденного к типу string, из которого убраны пробелы и добавлен префикс "_"*/
 // Функция печати логов, добавляет "date n time now" и перенос строки
 function printLog($text) { echo sprintf("[%s] %s", date("Y-m-d H:i:s"), $text) . "\n"; }
 // Функция преобразования текста в ключ индекса, убирает пробелы, переводит в верхний регистр и добавляет префикс "_"
@@ -284,7 +262,6 @@ $attrs_groups_add_count = 0;
 $attrs_add_count = 0;
 $filts_add_count = 0;
 $cats_add_count = 0;
-// var_dump($GLOBALS['cats_outer_idxs']);
 // Функция конвертации групп предложений от поставщика в товар на сайте
 function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 	global $opts_add_count;
@@ -312,20 +289,16 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 	if ($exists_prod) $prod = array_merge($exists_prod, $prod);
 	$diff_count = 0;
 	$params = [];
-	// var_dump(3, 'prod article', $prod["article"], $offers_group);
 	foreach ($offers_group as $offer) {
 		if (!$prod["name"])
 			str_replace((string)$offer->article, "", (string)$offer->model);
 		if (!$prod["description"])
 			$prod["description"] = (string)$offer->description;
 		$article = (string)$offer->article;
-		
-		// var_dump((string)$offer->categoryId, str2idx((string)$offer->categoryId), $GLOBALS['cats_outer_idxs'][str2idx((string)$offer->categoryId)]);
 		$cat_outer = $GLOBALS['cats_outer_idxs'][str2idx((string)$offer->categoryId)];
 		$cat_name = (string)$cat_outer;
 		$cat_name_idx = str2idx($cat_name);
 		$is_found_cat = FALSE;
-		// var_dump($cat_name, $cat_name_idx);
 		// Ищем подходящую категорию
 		if (!array_key_exists($cat_name_idx, $prod["cats"])){
 			if (!array_key_exists($cat_name_idx, $GLOBALS['cats_idxs'])){
@@ -367,12 +340,10 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 				$cats_add_count++;
 			}
 		}
-		// var_dump($prod["cats"]);
 		// Собираем артикулы, для формирвоания значения поля meta_keyword
 		$prod["articles"][] = $article;
 		$articleA = preg_split("/\-/", $article);
 		if (!$prod["article"]) $prod["article"] = $articleA;
-		// var_dump(4, 'prod article', $prod["article"], !$prod["article"], $article);
 		if (abs(count($prod["article"]) - count($articleA)) > 1)
 			throw new Exception("ERROR: " . implode("-", $articleA) . " different length with " . implode("-", $prod["article"]) . " too much");
 		// Сопоставляем артикулы, для вычисления общего
@@ -392,29 +363,33 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 		$prod["quantity"] += (int)$offer->amount;
 		// Перебираем картинки предложения и складываем уникальные в индекс общих картинок, которые впоследствии станет перечнем изображений товара
 		foreach ($offer->picture as $_picture_url) {
+
 			$picture_url = (string)$_picture_url;
 			$hash = "_" . strtoupper((string)hash_file("md5", $picture_url));
 			if (!array_key_exists($hash, $prod["images_idxs"])) {
 				$cur_image = new Imagick($picture_url);
 				$cur_image->adaptiveResizeImage(32,32);
 				$is_unique = TRUE;
-				foreach ($prod["images_idxs"] as $hash => $image)
+				foreach ($prod["images_idxs"] as $image){
 					if (compareImages($cur_image, $image["imagick"])){
 						$is_unique = FALSE;
 						break;
 					}
-				if ($is_unique) $prod["images_idxs"][$hash] = [
-					"imagick" => $cur_image, 
-					"url" => $picture_url,
-					"is_main" => !(bool)count($prod["images_idxs"])
-				];
+				}
+				if ($is_unique) {
+					$prod["images_idxs"][$hash] = [
+						"imagick" => $cur_image, 
+						"url" => $picture_url,
+						"is_main" => !count($prod["images_idxs"])
+					];
+				}
 			}
 		}
 		// Генерируем массив параметров с целью вычислить различные у данной группы товаров
 		foreach ($offer->param as $param) {
 			$param_name = explode(",", (string)$param["name"])[0];
 			$param_idx = str2idx($param_name);
-			$param_value = (string)$param["name"];
+			$param_value = (string)$param;
 			$param_value_idx = str2idx($param_value);
 			if (!array_key_exists($param_idx, $params))
 				$params[$param_idx] = [
@@ -425,7 +400,6 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 				$params[$param_idx]["values"][] = $param_value_idx;
 		}
 	}
-	// var_dump(2, "$prod article ", $prod["article"]);
 	// Если предложений несколько, то проверяем существование подходящей опции, в ее отсутствии создаем новую
 	if ($diff_count){
 		$opt_name = array_reduce($params, function($acc, $item){
@@ -461,7 +435,8 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 			$param_name = explode(",", $param_full_name)[0];
 			$param_full_idx = str2idx($param_full_name);
 			$param_idx = str2idx($param_name);
-			$param_value = (string)$param["name"];
+			$param_value = (string)$param;
+			$param_value_idx = str2idx($param_value);
 			// Собираем наименование значения опции
 			if ($diff_count && count($params[$param_idx]["values"]) > 1) $cur_opt_val_namesA[] = $param_value;
 			// Ищем группу фильтров в общем индексе, если нет - пропускаем
@@ -469,7 +444,7 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 				$prod["filts_groups"][$param_full_idx] = $GLOBALS['filts_groups'][$GLOBALS['filts_groups_idxs'][$param_full_idx]];
 				$filts_group = $prod["filts_groups"][$param_full_idx];
 				$filts_group_id_idx = $GLOBALS['filts_groups_idxs'][$param_full_idx];
-				$param_value_idx = str2idx($param_value);
+				
 				// Ищем фильтр в глобальных индексах, если нет - создаем
 				if (!array_key_exists($param_value_idx, $GLOBALS['filts_idxs'][$filts_group_id_idx])){
 					execSQL("INSERT INTO `oc_filter` (`filter_group_id`,`sort_order`)
@@ -486,12 +461,12 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 						"name" => $param_value,
 						"filter_id" => $filt_id
 					];
-					$GLOBALS['filts_idxs'][$filts_group_id_idx][$param_full_idx] = $filt_id_idx;
+					$GLOBALS['filts_idxs'][$filts_group_id_idx][$param_value_idx] = $filt_id_idx;
 					$filts_add_count++;
 				}
 				// Проверяем есть ли данный фильтр в локальных списках конкретного товара, если нет добавляем
-				if (!array_key_exists($param_full_idx, $prod["filts"]))
-					$prod["filts"][$param_full_idx] = $GLOBALS['filts'][$GLOBALS['filts_idxs'][$filts_group_id_idx][$param_full_idx]];
+				if (!array_key_exists($param_value_idx, $prod["filts"]))
+					$prod["filts"][$param_value_idx] = $GLOBALS['filts'][$GLOBALS['filts_idxs'][$filts_group_id_idx][$param_value_idx]];
 			}
 			// Ищем группу атрибутов в общем индексе, если нет - создаем
 			if (!array_key_exists($param_full_idx, $GLOBALS['attrs_groups_idxs'])){
@@ -563,7 +538,6 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 			$prod["opt_vals"][$opt_val_id_idx] = array_merge($GLOBALS['opts_vals'][$opt_val_id_idx], $opt_val);
 		}
 	}
-	// var_dump(1, "$prod article ", $prod["article"]);
 	$prod["article"] = implode("-", $prod["article"]);
 	return $prod;
 }
@@ -585,7 +559,6 @@ foreach ($offers_groups_idxs as $hash => $offers_group) {
 		$offers_groups2upd_prods[key($found_prods_idxs)] = $offers_group["offers"];
 	// Если данной группе предложений не соответствует ни один товар, то конвертируем группу предложений в товар и добавляем в список товаров на добавление
 	} elseif (count($found_prods_idxs) === 0){
-		
 		$prods2adding[] = convertOffersGroup2Product($offers_group["offers"]);
 	// Если же группе предложений соответствует несколько товаров, то оцениваем, какой товар чаще сопостовляется с предложениями, выбираем его заглавноего, все предложения, которые не сопоставились, добавляем к нему, остальные в те товары, которым они были сопоставлены
 	} else {
@@ -605,12 +578,7 @@ foreach ($offers_groups_idxs as $hash => $offers_group) {
 }
 $prods2updating = [];
 foreach ($offers_groups2upd_prods as $prod_id_idx => $offers_group){
-	// foreach ($offers_group["offers"] as $offer) {
-	// 	if (!(string)$offer->categoryId){
-	// 		var_dump(2, $offer);
-	// 	}
-	// }
-	$prods2updating[] = convertOffersGroup2Product($offers_group["offers"], $GLOBALS['prods'][$prod_id_idx]);
+	$prods2updating[] = convertOffersGroup2Product($offers_group, $GLOBALS['prods'][$prod_id_idx]);
 }
 printLog(
 	"Compare import and exists data, convert offers group to products:
