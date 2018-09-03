@@ -118,28 +118,34 @@ foreach ($yml_catalog->categories->category as $cat)
 $offers_groups_idxs = [];
 foreach ($yml_catalog->offers->offer as $offer) {
 	// Отсеиваем не опубликованные товары
-	if ((string)$offer["available"] != "true")
+	if ((string)$offer["available"] != "true"){
 		continue;
+	}
 	$kingsilk_offers_count++;
 	$img_url = (string)$offer->picture[0];
 	$hash = "_" . strtoupper((string)hash_file("md5", $img_url));
 	$image = new Imagick($img_url); // можно оптимизировать, перенеся создание картинки под следующий if, так как после if'a переменные не удаляются, то они будут доступны и далее
 	$image->adaptiveResizeImage(32,32);
 	// Если на данный момент в индексе нет идентичной картинки, то пытаемся найти похожую
-	if (!array_key_exists($hash, $offers_groups_idxs))
-		foreach ($offers_groups_idxs as $exists_hash => $offers_group)
+	if (!array_key_exists($hash, $offers_groups_idxs)){
+		foreach ($offers_groups_idxs as $exists_hash => $offers_group){
 			if (compareImages($image, $offers_group['image'])){
 				$hash = $exists_hash;
 				break;
 			}
+		}
+	}
 	// Если hash существует в индексе групп предложений, то добавляем в группу данное предложение
-	if (array_key_exists($hash, $offers_groups_idxs))
-		$offers_groups_idxs[$hash]["offers"] = $offer;
+	if (array_key_exists($hash, $offers_groups_idxs)){
+		$offers_groups_idxs[$hash]["offers"][] = $offer;
+	}
 	// иначе создаем новую группу предложений
-	else $offers_groups_idxs[$hash] = [
+	else {
+		$offers_groups_idxs[$hash] = [
 			"offers" => [ $offer ],
 			"image" => $image
 		];
+	}
 }
 printLog(
 	"Built the index of KingSlik's offers:
@@ -278,7 +284,7 @@ $attrs_groups_add_count = 0;
 $attrs_add_count = 0;
 $filts_add_count = 0;
 $cats_add_count = 0;
-var_dump($GLOBALS['cats_idxs']);
+// var_dump($GLOBALS['cats_outer_idxs']);
 // Функция конвертации групп предложений от поставщика в товар на сайте
 function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 	global $opts_add_count;
@@ -306,60 +312,67 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 	if ($exists_prod) $prod = array_merge($exists_prod, $prod);
 	$diff_count = 0;
 	$params = [];
+	// var_dump(3, 'prod article', $prod["article"], $offers_group);
 	foreach ($offers_group as $offer) {
 		if (!$prod["name"])
 			str_replace((string)$offer->article, "", (string)$offer->model);
 		if (!$prod["description"])
 			$prod["description"] = (string)$offer->description;
 		$article = (string)$offer->article;
+		
+		// var_dump((string)$offer->categoryId, str2idx((string)$offer->categoryId), $GLOBALS['cats_outer_idxs'][str2idx((string)$offer->categoryId)]);
 		$cat_outer = $GLOBALS['cats_outer_idxs'][str2idx((string)$offer->categoryId)];
 		$cat_name = (string)$cat_outer;
 		$cat_name_idx = str2idx($cat_name);
 		$is_found_cat = FALSE;
+		// var_dump($cat_name, $cat_name_idx);
 		// Ищем подходящую категорию
-		if (!array_key_exists($cat_name_idx, $GLOBALS['cats_idxs'])){
-			echo 1;
-			foreach ($GLOBALS['cats_idxs'] as $idx => $cats_group_idx){
-				echo 2;
-				if (is_array($cats_group_idx) && array_key_exists($cat_name_idx, $cats_group_idx)){
-					echo 3;
-					$is_found_cat = TRUE;
-					$cat = $GLOBALS['cats'][$GLOBALS['cats_idxs'][$idx][$cat_name_idx]];
-					$prod["cats"][] = $cat;
-					if (in_array((int)$cat["category_id"], PRODS_WTH_CAT_NAME_PREFIX_CAT_ID) 
-						&& strpos($cat["name"], $prod["name"]) === FALSE)
-						$prod["name"] = $cat["name"] . " " . $prod["name"];
+		if (!array_key_exists($cat_name_idx, $prod["cats"])){
+			if (!array_key_exists($cat_name_idx, $GLOBALS['cats_idxs'])){
+				foreach ($GLOBALS['cats_idxs'] as $idx => $cats_group_idx){
+					if (is_array($cats_group_idx) && array_key_exists($cat_name_idx, $cats_group_idx)){
+						$is_found_cat = TRUE;
+						$cat = $GLOBALS['cats'][$GLOBALS['cats_idxs'][$idx][$cat_name_idx]];
+						$prod["cats"][$cat_name_idx] = $cat;
+						if (in_array((int)$cat["category_id"], PRODS_WTH_CAT_NAME_PREFIX_CAT_ID) 
+							&& strpos($cat["name"], $prod["name"]) === FALSE)
+							$prod["name"] = $cat["name"] . " " . $prod["name"];
+					}
 				}
+			} else{
+				$is_found_cat = TRUE;
+				$cat = $GLOBALS['cats'][$GLOBALS['cats_idxs'][$cat_name_idx]];
+				$prod["cats"][$cat_name_idx] = $cat;
+				if (in_array((int)$cat["category_id"], PRODS_WTH_CAT_NAME_PREFIX_CAT_ID) && strpos($cat["name"], $prod["name"]) === FALSE)
+					$prod["name"] = $cat["name"] . " " . $prod["name"];
 			}
-		} else{
-			echo 4;
-			$is_found_cat = TRUE;
-			$cat = $GLOBALS['cats'][$GLOBALS['cats_idxs'][$cat_name_idx]];
-			$prod["cats"][] = $cat;
-			if (in_array((int)$cat["category_id"], PRODS_WTH_CAT_NAME_PREFIX_CAT_ID) && strpos($cat["name"], $prod["name"]) === FALSE)
-				$prod["name"] = $cat["name"] . " " . $prod["name"];
+		
+			if (!$is_found_cat){
+				execSQL("INSERT INTO `oc_category` (`parent_id`,`top`,`column`,`status`,`date_added`,`date_modified`)
+					VALUES (".UNSORTED_CAT_ID.",1,1,0,'".date("Y-m-d H:i:s")."','".date("Y-m-d H:i:s")."')");
+				$cat_id = (string)$GLOBALS["mysqli"]->insert_id;
+				execSQL("INSERT INTO `oc_category_description` (`category_id`,`language_id`,`name`,`description`,`meta_title`,`meta_description`,`meta_keyword`)
+					VALUES (".$cat_id.",1,'".$cat_name."','','".$cat_name."','','');");
+				execSQL("INSERT INTO `oc_category_path` (`category_id`,`path_id`,`level`)
+					VALUES (".$cat_id.",".UNSORTED_CAT_ID.",0), (".$cat_id.",".$cat_id.",1);");
+				$cat_id_idx = str2idx($cat_id);
+				$GLOBALS['cats'][$cat_id_idx] = [
+					"category_id" => $cat_id, 
+					"name" => $cat_name, 
+					"meta_keyword" => "",
+					"parent_id" => UNSORTED_CAT_ID
+				];
+				$GLOBALS['cats_idxs'][str2idx(UNSORTED_CAT_ID)][$cat_name_idx] = $cat_id_idx;
+				$prod["cats"][$cat_name_idx] = $GLOBALS['cats'][$cat_id_idx];
+				$cats_add_count++;
+			}
 		}
-		if (!$is_found_cat){
-			$cat_id = (string)$GLOBALS["mysqli"]->insert_id;
-			execSQL("INSERT INTO `oc_category_description` (`category_id`,`language_id`,`name`,`description`,`meta_title`,`meta_description`,`meta_keyword`)
-				VALUES (".$cat_id.",1,'".$cat_name."','','".$cat_name."','','');");
-			execSQL("INSERT INTO `oc_category_path` (`category_id`,`path_id`,`level`)
-				VALUES (".$cat_id.",".UNSORTED_CAT_ID.",0), (".$cat_id.",".$cat_id.",1);");
-			$cat_id_idx = str2idx($cat_id);
-			$GLOBALS['cats'][$cat_id_idx] = [
-				"category_id" => $cat_id, 
-				"name" => $cat_name, 
-				"meta_keyword" => "",
-				"parent_id" => UNSORTED_CAT_ID
-			];
-			$GLOBALS['cats_idxs'][str2idx(UNSORTED_CAT_ID)][$cat_name_idx] = $cat_id_idx;
-			$prod["cats"][] = $GLOBALS['cats'][$cat_id_idx];
-			$cats_add_count++;
-		}
+		// var_dump($prod["cats"]);
 		// Собираем артикулы, для формирвоания значения поля meta_keyword
 		$prod["articles"][] = $article;
 		$articleA = preg_split("/\-/", $article);
 		if (!$prod["article"]) $prod["article"] = $articleA;
+		// var_dump(4, 'prod article', $prod["article"], !$prod["article"], $article);
 		if (abs(count($prod["article"]) - count($articleA)) > 1)
 			throw new Exception("ERROR: " . implode("-", $articleA) . " different length with " . implode("-", $prod["article"]) . " too much");
 		// Сопоставляем артикулы, для вычисления общего
@@ -368,7 +381,7 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 				$diff_count++;
 				$prod["article"][$loop_idx] = "*";
 				if ($diff_count >= count($prod["article"])) {
-					echo var_dump($offers_group);
+					var_dump($offers_group);
 					throw new Exception("ERROR: too much different parts of articles: " . implode("-", $articleA) . ", " . implode("-", $prod["article"]));
 				}
 			}
@@ -412,6 +425,7 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 				$params[$param_idx]["values"][] = $param_value_idx;
 		}
 	}
+	// var_dump(2, "$prod article ", $prod["article"]);
 	// Если предложений несколько, то проверяем существование подходящей опции, в ее отсутствии создаем новую
 	if ($diff_count){
 		$opt_name = array_reduce($params, function($acc, $item){
@@ -463,8 +477,9 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 					$filt_id = (string)$GLOBALS["mysqli"]->insert_id;
 					execSQL("INSERT INTO `oc_filter_description` (`filter_id`,`language_id`,`filter_group_id`,`name`)
 						VALUES (".$filt_id.",1,".$filts_group["filter_group_id"].",'".$param_value."');");
-					execSQL("INSERT INTO `oc_category_filter` (`category_id`,`filter_id`)
-						VALUES (".$cat_id.",".$filt_id.");"); // ТУТ НУЖЕН $cat_id!!!
+					foreach ($prod["cats"] as $cat)
+						execSQL("INSERT INTO `oc_category_filter` (`category_id`,`filter_id`)
+								 VALUES (".$cat["category_id"].",".$filt_id.");");
 					$filt_id_idx = str2idx($filt_id);
 					$GLOBALS['filts'][$filt_id_idx] = [
 						"filter_group_id" => $filts_group["filter_group_id"],
@@ -534,7 +549,7 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 			$opt_val_name_idx = str2idx($opt_val["name"]);
 			if (!array_key_exists($opt_val_name_idx, $GLOBALS['opts_vals_idxs'][$opt_id_idx])) {
 				execSQL("INSERT INTO `oc_option_value` (`option_id`,`image`,`sort_order`)
-						 VALUES (".$p_option_id.",'',0);");
+						 VALUES (".$opt_val["option_id"].",'',0);");
 				$opt_val["option_value_id"] = (string)$GLOBALS["mysqli"]->insert_id;
 				execSQL("INSERT INTO `oc_option_value_description` (`option_value_id`,`language_id`,`option_id`,`name`)
 					VALUES (".$opt_val["option_value_id"].",1,".$opt_val["option_id"].",'".$opt_val["name"]."')");
@@ -544,9 +559,11 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 				$opts_vals_add_count++;
 			}
 			// добавляем значение опции по ключу в виде индекса option_value_id само значение опции
-			$prod["opt_vals"][$GLOBALS['opts_vals_idxs'][$opt_id_idx][$opt_val_name_idx]] = $GLOBALS['opts_vals'][$GLOBALS['opts_vals_idxs'][$opt_val_name_idx]];
+			$opt_val_id_idx = $GLOBALS['opts_vals_idxs'][$opt_id_idx][$opt_val_name_idx];
+			$prod["opt_vals"][$opt_val_id_idx] = array_merge($GLOBALS['opts_vals'][$opt_val_id_idx], $opt_val);
 		}
 	}
+	// var_dump(1, "$prod article ", $prod["article"]);
 	$prod["article"] = implode("-", $prod["article"]);
 	return $prod;
 }
@@ -568,6 +585,7 @@ foreach ($offers_groups_idxs as $hash => $offers_group) {
 		$offers_groups2upd_prods[key($found_prods_idxs)] = $offers_group["offers"];
 	// Если данной группе предложений не соответствует ни один товар, то конвертируем группу предложений в товар и добавляем в список товаров на добавление
 	} elseif (count($found_prods_idxs) === 0){
+		
 		$prods2adding[] = convertOffersGroup2Product($offers_group["offers"]);
 	// Если же группе предложений соответствует несколько товаров, то оцениваем, какой товар чаще сопостовляется с предложениями, выбираем его заглавноего, все предложения, которые не сопоставились, добавляем к нему, остальные в те товары, которым они были сопоставлены
 	} else {
@@ -586,8 +604,14 @@ foreach ($offers_groups_idxs as $hash => $offers_group) {
 	}
 }
 $prods2updating = [];
-foreach ($offers_groups2upd_prods as $prod_id_idx => $offers_group)
-	$prods2updating[] = convertOffersGroup2Product($offers_group, $GLOBALS['prods'][$prod_id_idx]);
+foreach ($offers_groups2upd_prods as $prod_id_idx => $offers_group){
+	// foreach ($offers_group["offers"] as $offer) {
+	// 	if (!(string)$offer->categoryId){
+	// 		var_dump(2, $offer);
+	// 	}
+	// }
+	$prods2updating[] = convertOffersGroup2Product($offers_group["offers"], $GLOBALS['prods'][$prod_id_idx]);
+}
 printLog(
 	"Compare import and exists data, convert offers group to products:
 	 - products to updating count: " . count($prods2updating) . "
@@ -702,7 +726,7 @@ foreach ($prods2adding as $prod) {
 		if ($sql_prod_opt_val)
 			execSQL("INSERT INTO `oc_product_option_value` (`product_option_id`,`product_id`,`option_id`,`option_value_id`,
 															`quantity`,`subtract`,`price`,`price_prefix`,`points`,`points_prefix`,
-															`weight`,`weight_prefix`) VALUES ".substr($opt_val_ins_sql, 0, -1).";");
+															`weight`,`weight_prefix`) VALUES ".substr($sql_prod_opt_val, 0, -1).";");
     }
     // Создаем связки с фильтрами, если есть
     if ($prod["filts_groups"]){
