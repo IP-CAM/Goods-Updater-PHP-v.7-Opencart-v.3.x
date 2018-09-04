@@ -36,7 +36,7 @@ function execSQL($sql, &$mysqli=NULL, $mode="fetch_assoc") {
 	// if (strpos($mode, "close_conn_after") != FALSE) { $mysqli->close(); }
 	return count($result) == 1 ? $result[0] : $result;
 }
-
+array_map("unlink", glob(IMAGES_PATH.IMAGE_PATH_PREFIX."_*.jpg"));
 var_dump(execSQL("DELETE FROM oc_manufacturer WHERE `name` NOT LIKE 'Cleo'"));
 var_dump(execSQL("DELETE A.*
           from oc_product A

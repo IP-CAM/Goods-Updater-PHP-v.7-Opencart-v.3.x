@@ -16,18 +16,19 @@ function str2idx($str) { return "_" . strtoupper( str_replace(' ', '', (string)$
 function genIdxs($array, $val_key, $idx_keys, $filter_func=NULL) {
 	$idxs = [];
 	foreach ($array as $item) {
-		if (!$filter_func || $filter_func($item)){
-			if (is_string($idx_keys)){
-				foreach (preg_split("/\s?;\s?/", $item[$idx_keys]) as $idx)
-					if ($idx)
-						$idxs[str2idx($idx)] = str2idx((string)$item[$val_key]);
-			} else
-				foreach ($idx_keys as $idx_key)
-					foreach (preg_split("/\s?;\s?/", $item[$idx_key]) as $idx)
-						if ($idx)
-							$idxs[str2idx($idx)] = str2idx((string)$item[$val_key]);
+		if ($filter_func && !$filter_func($item)) { continue; } 
+		if (is_string($idx_keys)){
+			foreach (preg_split("/\s?;\s?/", $item[$idx_keys]) as $idx) {
+				if ($idx) { $idxs[str2idx($idx)] = str2idx((string)$item[$val_key]); }
+			} unset($idx);
+		} else {
+			foreach ($idx_keys as $idx_key) {
+				foreach (preg_split("/\s?;\s?/", $item[$idx_key]) as $idx) {
+					if ($idx) { $idxs[str2idx($idx)] = str2idx((string)$item[$val_key]); }
+				}
+			} unset($idx_key);
 		}
-	}
+	} unset($item);
 	return $idxs;
 }
 // Функция сравнения изображений
@@ -38,6 +39,7 @@ function compareImages($image1, $image2) {
 // Функция исполнения SQL-запросов в БД, инкапсулирующая все ужасы взаимодействия с БД MySQL на PHP
 function execSQL($sql, $mode="fetch_assoc") {
 	$sql_rows = is_string($sql) ? array($sql) : $sql;
+	// Проверяем коннект к БД, в случае проблем - пытаемся переподключ
 	if (!$GLOBALS["mysqli"] || $GLOBALS["mysqli"]->connect_errno) { 
 		$GLOBALS["mysqli"] = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME); 
 		if ($GLOBALS["mysqli"]->connect_errno) throw new Exception("Can't connect to DB: (" . $GLOBALS["mysqli"]->connect_errno . ") " . $GLOBALS["mysqli"]->connect_error);
@@ -46,7 +48,7 @@ function execSQL($sql, $mode="fetch_assoc") {
 		if (!$GLOBALS["mysqli"]->set_charset("utf8")) {
 		    printf("set charset utf8 error: %s\n", $GLOBALS["mysqli"]->error);
 		    exit();
-		} else printf("current charset: %s\n", $GLOBALS["mysqli"]->character_set_name());
+		} else { printf("current charset: %s\n", $GLOBALS["mysqli"]->character_set_name()); }
 	}
 	$result = array();
 	foreach ($sql_rows as $idx => $sql) {
@@ -58,11 +60,11 @@ function execSQL($sql, $mode="fetch_assoc") {
 					reset($row);
 					$key = str2idx($row[key($row)]);
 					$result[$key] = $row;
-			    }
-			} elseif ($mode==="num_rows") $result[] = $res->num_rows;
-			else throw new Exception("Recieved unexpected mode (".$mode.") for result return: ".$sql );
+			    } unset($row);
+			} elseif ($mode==="num_rows") { $result[] = $res->num_rows;
+			} else { throw new Exception("Recieved unexpected mode (".$mode.") for result return: ".$sql ); }
 		} else $result[] = $res;
-	}
+	} unset($idx, $sql, $res);
 	return count($result) === 1 ? $result[0] : $result;
 }
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -70,13 +72,9 @@ function execSQL($sql, $mode="fetch_assoc") {
 // -= Старт работы скрипта =-
 $start = microtime(true);
 printLog("Updater script started");
-
 // Инициализация глобальных переменных, счетчиков
 $GLOBALS["mysqli"] = NULL;
 $kingsilk_offers_count = 0;
-$goods_added = 0;
-$goods_updated = 0;
-$goods_deleted = 0;
 // Проверка хранилища фотографий
 if (!is_dir(IMAGES_PATH)) throw new Exception("ERROR: images path not found!");
 $IMAGES_FULL_PATH = IMAGES_PATH . IMAGE_PATH_PREFIX;
@@ -89,8 +87,9 @@ $yml_catalog = new SimpleXMLElement(
 );
 // Формирование индекса импортируемых категорий по id'шнику категории поставщика
 $GLOBALS['cats_outer_idxs'] = [];
-foreach ($yml_catalog->categories->category as $cat)
+foreach ($yml_catalog->categories->category as $cat){
 	$GLOBALS['cats_outer_idxs'][str2idx((string)$cat["id"])] = $cat;
+} unset($cat);
 // Группировка предложений поставщика по схожести картинок,
 // формирование древовидного индекса по md5 хэшу картинок
 $offers_groups_idxs = [];
@@ -105,49 +104,57 @@ foreach ($yml_catalog->offers->offer as $offer) {
 	$image = new Imagick($img_url); // можно оптимизировать, перенеся создание картинки под следующий if, так как после if'a переменные не удаляются, то они будут доступны и далее
 	$image->adaptiveResizeImage(32,32);
 	// Если на данный момент в индексе нет идентичной картинки, то пытаемся найти похожую
-	if (!array_key_exists($hash, $offers_groups_idxs)){
+	if (!array_key_exists($hash, $offers_groups_idxs)) {
 		foreach ($offers_groups_idxs as $exists_hash => $offers_group){
 			if (compareImages($image, $offers_group['image'])){
 				$hash = $exists_hash;
 				break;
 			}
-		}
+		} unset($exists_hash, $offers_group);
 	}
 	// Если hash существует в индексе групп предложений, то добавляем в группу данное предложение
-	if (array_key_exists($hash, $offers_groups_idxs)){
+	if (array_key_exists($hash, $offers_groups_idxs)) {
 		$offers_groups_idxs[$hash]["offers"][] = $offer;
-	}
 	// иначе создаем новую группу предложений
-	else {
+	} else {
 		$offers_groups_idxs[$hash] = [
 			"offers" => [ $offer ],
 			"image" => $image
 		];
 	}
-}
+} unset($offer, $img_url, $hash, $image);
 printLog(
 	"Built the index of KingSlik's offers:
 	 - importing offers count: " . $kingsilk_offers_count . "
 	 - offers group by compare images count: " . count($offers_groups_idxs)
 );
+unset($kingsilk_offers_count, $yml_catalog, $offer, $img_url, $image);
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=-=-=-=-=-=-=-=-
 
 // -= Получение данных из БД, формирование индексов =-
 // TODO добавить поддержку безконечного количества уровней вложенности
 // Получение перечня категорий, формироване индекса по category ID, наименованию и синонимам
-$GLOBALS['cats'] = execSQL("SELECT occd.`category_id` AS 'category_id',occd.`name` AS 'name', occd.`meta_keyword` AS 'meta_keyword', occ.`parent_id` AS 'parent_id' FROM `oc_category_description` AS occd LEFT JOIN `oc_category` AS occ ON occ.`category_id`=occd.`category_id` WHERE occd.`language_id`=1;");
-if (!$GLOBALS['cats']) $GLOBALS['cats'] = [];
+$GLOBALS['cats'] = execSQL("SELECT occd.`category_id`  AS 'category_id',
+								   occd.`name` 		   AS 'name', 
+								   occd.`meta_keyword` AS 'meta_keyword', 
+								   occ.`parent_id` 	   AS 'parent_id' 
+						    FROM `oc_category_description` AS occd 
+						    LEFT JOIN `oc_category` AS occ ON occ.`category_id`=occd.`category_id` 
+						    WHERE occd.`language_id`=1;");
+if (!$GLOBALS['cats']) { $GLOBALS['cats'] = []; }
 $GLOBALS['cats_idxs'] = genIdxs(
 	$GLOBALS['cats'], "category_id", [ "name", "meta_keyword" ],
 	function ($item) { return $item["parent_id"] == 0; }
 );
 // Категории второго уровня складываем индекс группируя по родительским категориям, чтобы не затереть категории с одинаковым наименованием или синонимами
-foreach ($GLOBALS['cats'] as $cat_id_idx => $cat)
+foreach ($GLOBALS['cats'] as $cat_id_idx => $cat){
 	if ($cat["parent_id"] == 0)
 		$GLOBALS['cats_idxs'][$cat_id_idx] = genIdxs(
 			$GLOBALS['cats'], "category_id", [ "name", "meta_keyword" ],
 			function ($item) use ($cat_id_idx) { return str2idx($item["parent_id"]) === $cat_id_idx; }
 		);
+	unset($cat_id_idx, $cat);
+}
 // В случае отсутствия категории "неотсортированные" - создаем
 if (!array_key_exists(str2idx(UNSORTED_CAT_ID), $GLOBALS['cats'])) {
 	$datetimenow = date("Y-m-d H:i:s");
@@ -156,6 +163,7 @@ if (!array_key_exists(str2idx(UNSORTED_CAT_ID), $GLOBALS['cats'])) {
 		"INSERT INTO `oc_category` (`category_id`,`image`,`top`,`column`,`status`,`date_added`,`date_modified`)
     	VALUES (".UNSORTED_CAT_ID.",'',1,1,0,'".$datetimenow."','".$datetimenow."');"
     );
+    unset($datetimenow);
 	// Создание записи в таблице `oc_category_description`
 	execSQL(
 		"INSERT INTO `oc_category_description` (`category_id`,`language_id`,`name`,`description`,`meta_title`,`meta_description`,`meta_keyword`)
@@ -168,7 +176,7 @@ if (!array_key_exists(str2idx(UNSORTED_CAT_ID), $GLOBALS['cats'])) {
 
 // Получение перечня производителей, формирование индекса по manufacturer ID и наименованию
 $GLOBALS['mans'] = execSQL("SELECT `manufacturer_id`, `name` FROM oc_manufacturer");
-if (!$GLOBALS['mans']) $GLOBALS['mans'] = [];
+if (!$GLOBALS['mans']) { $GLOBALS['mans'] = []; }
 $GLOBALS['mans_idxs'] = genIdxs($GLOBALS['mans'], "manufacturer_id", "name");
 // Получение ID производителя Кингсилк, создание, в случае его отстутсвия
 $GLOBALS['kingsilk_man_id'] = array_key_exists("_КИНГСИЛК", $GLOBALS['mans_idxs']) 
@@ -190,40 +198,49 @@ if (!$GLOBALS['kingsilk_man_id']){
 }
 // Получение перечня товаров, формирование индекса по product ID и наименованию
 $GLOBALS['prods'] = execSQL("SELECT p.product_id AS 'product_id', pd.meta_keyword AS 'meta_keyword'
-				FROM oc_product AS p 
-				LEFT JOIN oc_product_description AS pd ON p.product_id=pd.product_id 
-				WHERE pd.language_id=1");
-if (!$GLOBALS['prods']) $GLOBALS['prods'] = [];
+							 FROM oc_product AS p 
+							 LEFT JOIN oc_product_description AS pd ON p.product_id=pd.product_id 
+							 WHERE pd.language_id=1");
+if (!$GLOBALS['prods']) { $GLOBALS['prods'] = []; }
 $GLOBALS['prods_idxs'] = genIdxs($GLOBALS['prods'], "product_id", "meta_keyword");
 // Получение перечня опций товаров, формирование индекса по option ID и наименованиб
 $GLOBALS['opts'] = execSQL("SELECT `option_id`,`name` FROM `oc_option_description` WHERE `language_id`=1;");
 if (!$GLOBALS['opts']) $GLOBALS['opts'] = [];
 $GLOBALS['opts_idxs'] = genIdxs($GLOBALS['opts'], "option_id", "name");
 // Получение перечня значений опций товаров, формирование индекса по option value ID и наименованиям
-$GLOBALS['opts_vals'] = execSQL("SELECT `option_value_id`,`name`,`option_id` FROM `oc_option_value_description` WHERE `language_id`=1;");
+$GLOBALS['opts_vals'] = execSQL("SELECT `option_value_id`,`name`,`option_id` 
+								 FROM `oc_option_value_description` WHERE `language_id`=1;");
 $GLOBALS['opts_vals_idxs'] = [];
 // Группируем значения опций по индексам ID самих опций, чтобы индексы наименований не затерли значения от разных опций
-foreach ($GLOBALS['opts'] as $opt_id_idx => $opt)
+foreach ($GLOBALS['opts'] as $opt_id_idx => $opt){
 	$GLOBALS['opts_vals_idxs'][$opt_id_idx] = genIdxs(
 		$GLOBALS['opts_vals'], "option_value_id", "name", 
 	    function ($item) use ($opt_id_idx) { return str2idx($item["option_id"]) === $opt_id_idx; }
 	);
+	unset($opt_id_idx, $opt);
+}
+	
 // Получение перечня групп атрибутов, формирование индексов по attribute group ID и наименованию
 $GLOBALS['attrs_groups'] = execSQL("SELECT `attribute_group_id`,`name` FROM `oc_attribute_group_description` WHERE `language_id`=1");
-if (!$GLOBALS['attrs_groups']) $GLOBALS['attrs_groups'] = [];
+if (!$GLOBALS['attrs_groups']) { $GLOBALS['attrs_groups'] = []; }
 $GLOBALS['attrs_groups_idxs'] = genIdxs($GLOBALS['attrs_groups'], "attribute_group_id", "name");
 // Получение перечня атрибутов, формирование индексов по attribute ID и наименованию
-$GLOBALS['attrs'] = execSQL("SELECT oca.`attribute_id` AS 'attribute_id', ocad.`name` AS 'name', oca.`attribute_group_id` AS 'attribute_group_id'
-				  FROM `oc_attribute` AS oca LEFT JOIN `oc_attribute_description` AS ocad
-				  ON oca.`attribute_id`=ocad.`attribute_id` WHERE ocad.`language_id`=1;");
-if (!$GLOBALS['attrs']) $GLOBALS['attrs'] = [];
+$GLOBALS['attrs'] = execSQL("SELECT oca.`attribute_id` AS 'attribute_id', 
+									ocad.`name` AS 'name', 
+									oca.`attribute_group_id` AS 'attribute_group_id'
+						     FROM `oc_attribute` AS oca LEFT JOIN `oc_attribute_description` AS ocad
+						     ON oca.`attribute_id`=ocad.`attribute_id` WHERE ocad.`language_id`=1;");
+if (!$GLOBALS['attrs']) { $GLOBALS['attrs'] = []; }
 $GLOBALS['attrs_idxs'] = [];
 // группировка по индексу идентификатора группы атрибутов, во избежании затирания индексов наименований атрибутов от разных групп
-foreach ($GLOBALS['attrs_groups'] as $attrs_group_id_idx => $attrs_group)
+foreach ($GLOBALS['attrs_groups'] as $attrs_group_id_idx => $attrs_group) {
 	$GLOBALS['attrs_idxs'][$attrs_group_id_idx] = genIdxs(
 		$GLOBALS['attrs'], "attribute_id", "name",
 	    function ($item) use ($attrs_group_id_idx) { return str2idx($item["attribute_group_id"]) === $attrs_group_id_idx; }
 	);
+	unset($attrs_group_id_idx, $attrs_group);
+}
+	
 // Получение перечня групп фильтров, построение индекса по filter group ID и наименованию
 $GLOBALS['filts_groups'] = execSQL("SELECT `filter_group_id`,`name` FROM `oc_filter_group_description` WHERE `language_id`=1");
 if (!$GLOBALS['filts_groups']) $GLOBALS['filts_groups'] = [];
@@ -233,12 +250,13 @@ $GLOBALS['filts'] = execSQL("SELECT `filter_id`,`filter_group_id`,`name` FROM `o
 if (!$GLOBALS['filts']) $GLOBALS['filts'] = [];
 $GLOBALS['filts_idxs'] = [];
 // группировка по индексу идентификатора фильтра, во избежании затирания индексов фильтров от разных групп
-foreach ($GLOBALS['filts_groups'] as $filts_group_id_idx => $filts_group)
+foreach ($GLOBALS['filts_groups'] as $filts_group_id_idx => $filts_group){
 	$GLOBALS['filts_idxs'][$filts_group_id_idx] = genIdxs(
 		$GLOBALS['filts'], "filter_id", "name",
 	    function ($item) use ($filts_group_id_idx) { return str2idx($item["filter_group_id"]) === $filts_group_id_idx; }
 	);
-
+	unset($filts_group_id_idx, $filts_group);
+}
 printLog(
 	"Built the index of the exists data:
 	 - products count (indexes): " . count($GLOBALS['prods']) . " (" . count($GLOBALS['prods_idxs']) . ")
@@ -286,14 +304,13 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 		"name" => NULL,
 		"description" => NULL
 	];
-	if ($exists_prod) $prod = array_merge($exists_prod, $prod);
+	if ($exists_prod) { $prod = array_merge($exists_prod, $prod); }
 	$diff_count = 0;
 	$params = [];
+	$img_sort_order = 0;
 	foreach ($offers_group as $offer) {
-		if (!$prod["name"])
-			str_replace((string)$offer->article, "", (string)$offer->model);
-		if (!$prod["description"])
-			$prod["description"] = (string)$offer->description;
+		if (!$prod["name"]) { $prod["name"] = str_replace((string)$offer->article, "", (string)$offer->model); }
+		if (!$prod["description"]) { $prod["description"] = (string)$offer->description; }
 		$article = (string)$offer->article;
 		$cat_outer = $GLOBALS['cats_outer_idxs'][str2idx((string)$offer->categoryId)];
 		$cat_name = (string)$cat_outer;
@@ -303,14 +320,16 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 		if (!array_key_exists($cat_name_idx, $prod["cats"])){
 			if (!array_key_exists($cat_name_idx, $GLOBALS['cats_idxs'])){
 				foreach ($GLOBALS['cats_idxs'] as $idx => $cats_group_idx){
-					if (is_array($cats_group_idx) && array_key_exists($cat_name_idx, $cats_group_idx)){
+					if (is_array($cats_group_idx) && array_key_exists($cat_name_idx, $cats_group_idx)) {
 						$is_found_cat = TRUE;
 						$cat = $GLOBALS['cats'][$GLOBALS['cats_idxs'][$idx][$cat_name_idx]];
 						$prod["cats"][$cat_name_idx] = $cat;
 						if (in_array((int)$cat["category_id"], PRODS_WTH_CAT_NAME_PREFIX_CAT_ID) 
-							&& strpos($cat["name"], $prod["name"]) === FALSE)
+							&& strpos($cat["name"], $prod["name"]) === FALSE) {
 							$prod["name"] = $cat["name"] . " " . $prod["name"];
+						}
 					}
+					unset($idx, $cats_group_idx, $cat);
 				}
 			} else{
 				$is_found_cat = TRUE;
@@ -318,8 +337,8 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 				$prod["cats"][$cat_name_idx] = $cat;
 				if (in_array((int)$cat["category_id"], PRODS_WTH_CAT_NAME_PREFIX_CAT_ID) && strpos($cat["name"], $prod["name"]) === FALSE)
 					$prod["name"] = $cat["name"] . " " . $prod["name"];
+				unset($cat);
 			}
-		
 			if (!$is_found_cat){
 				execSQL("INSERT INTO `oc_category` (`parent_id`,`top`,`column`,`status`,`date_added`,`date_modified`)
 					VALUES (".UNSORTED_CAT_ID.",1,1,0,'".date("Y-m-d H:i:s")."','".date("Y-m-d H:i:s")."')");
@@ -338,8 +357,10 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 				$GLOBALS['cats_idxs'][str2idx(UNSORTED_CAT_ID)][$cat_name_idx] = $cat_id_idx;
 				$prod["cats"][$cat_name_idx] = $GLOBALS['cats'][$cat_id_idx];
 				$cats_add_count++;
+				unset($cat_id_idx, $cat_id);
 			}
 		}
+		unset($is_found_cat);
 		// Собираем артикулы, для формирвоания значения поля meta_keyword
 		$prod["articles"][] = $article;
 		$articleA = preg_split("/\-/", $article);
@@ -352,20 +373,21 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 				$diff_count++;
 				$prod["article"][$loop_idx] = "*";
 				if ($diff_count >= count($prod["article"])) {
-					var_dump($offers_group);
 					throw new Exception("ERROR: too much different parts of articles: " . implode("-", $articleA) . ", " . implode("-", $prod["article"]));
 				}
 			}
+			unset($loop_idx, $article_part);
 		}
+		unset($articleA);
 		// Сопоставляем цену, для вычисления общей
-		if (!$prod["price"] || $prod["price"] > (float)$offer->price) $prod["price"] = (float)$offer->price;
+		if (!$prod["price"] || $prod["price"] > (float)$offer->price) { $prod["price"] = (float)$offer->price; }
 		// Агрегируем остаток по всем предложениям, чтобы сформировать общий остаток по товару
 		$prod["quantity"] += (int)$offer->amount;
 		// Перебираем картинки предложения и складываем уникальные в индекс общих картинок, которые впоследствии станет перечнем изображений товара
-		foreach ($offer->picture as $_picture_url) {
 
+		foreach ($offer->picture as $_picture_url) {
 			$picture_url = (string)$_picture_url;
-			$hash = "_" . strtoupper((string)hash_file("md5", $picture_url));
+			$hash = str2idx(hash_file("md5", $picture_url));
 			if (!array_key_exists($hash, $prod["images_idxs"])) {
 				$cur_image = new Imagick($picture_url);
 				$cur_image->adaptiveResizeImage(32,32);
@@ -373,17 +395,21 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 				foreach ($prod["images_idxs"] as $image){
 					if (compareImages($cur_image, $image["imagick"])){
 						$is_unique = FALSE;
-						break;
+						unset($image); break;
 					}
+					unset($image);
 				}
 				if ($is_unique) {
 					$prod["images_idxs"][$hash] = [
 						"imagick" => $cur_image, 
 						"url" => $picture_url,
-						"is_main" => !$prod["images_idxs"]
+						"sort_order" => $img_sort_order
 					];
+					$img_sort_order++;
 				}
+				unset($cur_image, $is_unique);
 			}
+			unset($_picture_url, $picture_url, $hash);
 		}
 		// Генерируем массив параметров с целью вычислить различные у данной группы товаров
 		foreach ($offer->param as $param) {
@@ -396,8 +422,10 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 					"name" => $param_name,
 					"values" => [ $param_value_idx ]
 				];
-			elseif (!in_array($param_value_idx, $params[$param_idx]["values"]))
+			elseif (!in_array($param_value_idx, $params[$param_idx]["values"])){
 				$params[$param_idx]["values"][] = $param_value_idx;
+			}
+			unset($param, $param_name, $param_idx, $param_value, $param_value_idx);
 		}
 	}
 	// Если предложений несколько, то проверяем существование подходящей опции, в ее отсутствии создаем новую
@@ -420,16 +448,16 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 			$GLOBALS['opts_idxs'][$opt_name_idx] = $opt_id_idx;
 			$GLOBALS['opts_vals_idxs'][$opt_id_idx] = [];
 			$opts_add_count++;
-		} 
-		$opt_id_idx = $GLOBALS['opts_idxs'][$opt_name_idx];
-		$prod["opt"] = $GLOBALS['opts'][$opt_id_idx];
+			unset($opt_id_idx, $opt_id);
+		}
+		$prod["opt"] = $GLOBALS['opts'][ $GLOBALS['opts_idxs'][$opt_name_idx] ];
+		unset($opt_name, $opt_name_idx);
 	}
-	
 	// Собираем массив значений опций, проверяем каждую на наличие, при отсутствуии оных - создаем
 	// Параллельно собираем массив атрибутов и групп атрибутов, фильтров и их групп
 	foreach ($offers_group as $offer) {
 		// Формируем наименование значения опции, подходящее данному предложению
-		$cur_opt_val_namesA = [];
+		$cur_opt_val_name = "";
 		foreach ($offer->param as $param) {
 			$param_full_name = (string)$param["name"];
 			$param_name = explode(",", $param_full_name)[0];
@@ -438,7 +466,9 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 			$param_value = (string)$param;
 			$param_value_idx = str2idx($param_value);
 			// Собираем наименование значения опции
-			if ($diff_count && count($params[$param_idx]["values"]) > 1) $cur_opt_val_namesA[] = $param_value;
+			if ($diff_count && (count($params[$param_idx]["values"]) > 1) && strpos($cur_opt_val_name, $param_value) === FALSE) {
+				$cur_opt_val_name .= $cur_opt_val_name ? " / " . $param_value : $param_value;
+			}
 			// Ищем группу фильтров в общем индексе, если нет - пропускаем
 			if (array_key_exists($param_full_idx, $GLOBALS['filts_groups_idxs']) && !(array_key_exists($param_full_idx, $prod["filts_groups"]))) {
 				$prod["filts_groups"][$param_full_idx] = $GLOBALS['filts_groups'][$GLOBALS['filts_groups_idxs'][$param_full_idx]];
@@ -500,11 +530,17 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 				execSQL("INSERT INTO `oc_bf_attribute_value` (`attribute_id`,`language_id`,`value`,`sort_order`)
 					VALUES (".$attr_id.",1,'',0);");
 				$attr_id_idx = str2idx($attr_id);
+				$attr_val_id = (string)$GLOBALS["mysqli"]->insert_id;
+				if (!$attr_val_id && $attr_val_id !== 0) {
+					var_dump($attr_val_id, "INSERT INTO `oc_bf_attribute_value` (`attribute_id`,`language_id`,`value`,`sort_order`)
+					VALUES (".$attr_id.",1,'',0);");
+					throw new Exception("wrong attr_val_id");
+				}
 				$GLOBALS['attrs'][$attr_id_idx] = [
 					"attribute_id" => $attr_id,
 					"attribute_group_id" => $attr_group["attribute_group_id"],
 					"name" => $param_value,
-					"attribute_value_id" => (string)$GLOBALS["mysqli"]->insert_id
+					"attribute_value_id" => $attr_val_id
 				];
 				$GLOBALS['attrs_idxs'][$attr_group_id_idx][$param_value_idx] = $attr_id_idx;
 				$attrs_add_count++;
@@ -512,16 +548,18 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 			// Ищем атрибут в локально перечне атрибутов, если нет - добавляем
 			if (!array_key_exists($param_value_idx, $prod["attrs"]))
 				$prod["attrs"][$param_value_idx] = $GLOBALS['attrs'][$GLOBALS['attrs_idxs'][$attr_group_id_idx][$param_value_idx]];
+			unset($param);
 		}
 		if ($diff_count){
 			$opt_val = [
-				"name" => implode(" / ", $cur_opt_val_namesA),
+				"name" => $cur_opt_val_name,
 				"quantity" => (int)$offer->amount,
 				"price" => (float)$offer->price - $prod["price"],
 				"option_id" => $prod["opt"]["option_id"]
 			];
 			// Проверяем существует ли подходящее значение опции, если нет - создаем
 			$opt_val_name_idx = str2idx($opt_val["name"]);
+			$opt_id_idx = str2idx($opt_val["option_id"]);
 			if (!array_key_exists($opt_val_name_idx, $GLOBALS['opts_vals_idxs'][$opt_id_idx])) {
 				execSQL("INSERT INTO `oc_option_value` (`option_id`,`image`,`sort_order`)
 						 VALUES (".$opt_val["option_id"].",'',0);");
@@ -536,7 +574,9 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
 			// добавляем значение опции по ключу в виде индекса option_value_id само значение опции
 			$opt_val_id_idx = $GLOBALS['opts_vals_idxs'][$opt_id_idx][$opt_val_name_idx];
 			$prod["opt_vals"][$opt_val_id_idx] = array_merge($GLOBALS['opts_vals'][$opt_val_id_idx], $opt_val);
+			unset($cur_opt_val_name, $opt_val, $opt_val_id_idx,$opt_val_name_idx);
 		}
+		unset($offer);
 	}
 	$prod["article"] = implode("-", $prod["article"]);
 	return $prod;
@@ -549,9 +589,10 @@ foreach ($offers_groups_idxs as $hash => $offers_group) {
 	foreach ($offers_group["offers"] as $loop_idx => $offer) {
 		$article_idx = str2idx((string)$offer->article); // Артикул, преобразованный в индекс
 		if (array_key_exists($article_idx, $GLOBALS['prods_idxs'])){
-			$prod_id_idx = str2idx($GLOBALS['prods_idxs'][$article_idx]);
+			$prod_id_idx = $GLOBALS['prods_idxs'][$article_idx];
 			$found_prods_idxs[$prod_id_idx][] = $loop_idx;
 		}
+		unset($loop_idx, $offer);
 	}
 	// Если данной группе предложений соответствует один товар, то добавляем все предложения на обновление товара
 	if (count($found_prods_idxs) === 1){
@@ -564,21 +605,27 @@ foreach ($offers_groups_idxs as $hash => $offers_group) {
 	} else {
 		$main_prod_id_idx = NULL;
 		foreach ($found_prods_idxs as $prod_id_idx => $offers_loop_idxs) {
-			if (!$main_prod_id_idx || count($found_prods_idxs[$main_prod_id_idx]) < count($offers_loop_idxs)) 
+			if (!$main_prod_id_idx || ( count($found_prods_idxs[$main_prod_id_idx]) < count($offers_loop_idxs) )) {
 				$main_prod_id_idx = $prod_id_idx;
+			}
+			unset($prod_id_idx, $offers_loop_idxs);
 		}
 		foreach ($offers_group["offers"] as $offer) {
 			$article_idx = str2idx((string)$offer->article); // Артикул, преобразованный в индекс
-			if (array_key_exists($article_idx, $GLOBALS['prods_idxs']))
+			if (array_key_exists($article_idx, $GLOBALS['prods_idxs'])){
 				$offers_groups2upd_prods[$GLOBALS['prods_idxs'][$article_idx]][] = $offer;
-			else
+			} else {
 				$offers_groups2upd_prods[$main_prod_id_idx][] = $offer;
+			}
+			unset($offer, $article_idx);
 		}
+		unset($main_prod_id_idx);
 	}
 }
 $prods2updating = [];
 foreach ($offers_groups2upd_prods as $prod_id_idx => $offers_group){
 	$prods2updating[] = convertOffersGroup2Product($offers_group, $GLOBALS['prods'][$prod_id_idx]);
+	unset($prod_id_idx, $offers_group);
 }
 printLog(
 	"Compare import and exists data, convert offers group to products:
@@ -591,6 +638,7 @@ printLog(
 	 - added attributes groups count: " . $attrs_groups_add_count . "
 	 - added attributes count: " . $attrs_add_count
 );
+unset($opts_add_count, $opts_vals_add_count,$filts_add_count,$cats_add_count,$attrs_groups_add_count,$attrs_add_count);
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 // -= Создание товаров =-
@@ -635,13 +683,14 @@ foreach ($prods2adding as $prod) {
 				$IMAGES_FULL_PATH . $hash_idx . ".jpg", 
 				file_get_contents($image["url"])
 			);
-		if ($image["is_main"])
+		if ($image["sort_order"] === 0){
 			execSQL("UPDATE `oc_product` SET `image`='".$image_path."' WHERE product_id=".$p_id.";");  
-		else{
-	    	execSQL("INSERT INTO `oc_product_image` (`product_id`, `image`, `product_option_value_id`)
-	    		VALUES (".$p_id.", '".$image_path."', 0)");
+		} else {
+	    	execSQL("INSERT INTO `oc_product_image` (`product_id`, `image`, `product_option_value_id`, `sort_order`)
+	    		VALUES (".$p_id.", '".$image_path."', 0, ".$image["sort_order"].")");
 	    	$prod_img_add_count++;
 		}
+		unset($image, $image_path, $hash_idx);
 	}
 	// Добавляем описание товара
 	execSQL(
@@ -665,6 +714,7 @@ foreach ($prods2adding as $prod) {
 	    	VALUES (".$p_id.",".$cat["category_id"].");"
 	    );
     	$prod_cat_add_count++;
+    	unset($cat);
     }
     // Создаем еще несколько записей необходимых для отображения товара на сайте
     execSQL(
@@ -684,51 +734,63 @@ foreach ($prods2adding as $prod) {
     	execSQL("INSERT INTO `oc_product_option` (`product_id`,`option_id`,`value`,`required`)
 				VALUES (".$p_id.",".$prod["opt"]["option_id"].",'',1);");
 		$prod["opt"]["product_option_id"] = (string)$GLOBALS["mysqli"]->insert_id;
-		if (!$prod["opt_vals"]) throw new Exception("undefined 'opt_vals', but 'opt' is exists!");
+		if (!$prod["opt_vals"]) { throw new Exception("undefined 'opt_vals', but 'opt' is exists!"); }
 		$prod_opt_add_count++;
 		$sql_prod_opt_val = "";
 		foreach ($prod["opt_vals"] as $opt_val){
 			$sql_prod_opt_val .= "(".$prod["opt"]["product_option_id"].",".$p_id.",".$prod["opt"]["option_id"].",".$opt_val["option_value_id"].",".$opt_val["quantity"].",1,".$opt_val["price"].",'+',0,'+',0,'+'),";
 			$prod_opt_val_add_count++;
+			unset($opt_val);
 		}
-		if ($sql_prod_opt_val)
+		if ($sql_prod_opt_val){
 			execSQL("INSERT INTO `oc_product_option_value` (`product_option_id`,`product_id`,`option_id`,`option_value_id`,
 															`quantity`,`subtract`,`price`,`price_prefix`,`points`,`points_prefix`,
 															`weight`,`weight_prefix`) VALUES ".substr($sql_prod_opt_val, 0, -1).";");
+		}
+		unset($sql_prod_opt_val);
     }
     // Создаем связки с фильтрами, если есть
     if ($prod["filts_groups"]){
     	$sql_prod_filt = "";
     	$sql_bf_filt = "";
-    	if (!$prod["filts"]) throw new Exception("undefined product filters, but product filters groups is exists!");
+    	if (!$prod["filts"]) { throw new Exception("undefined product filters, but product filters groups is exists!"); }
     	foreach ($prod["filts"] as $filt){
     		$sql_prod_filt .= "(".$p_id.",".$filt["filter_id"]."),";
     		$sql_bf_filt .= "(".$p_id.",'f".$filt["filter_group_id"]."',".$filt["filter_id"].",1,0),";
     		$prod_filt_add_count++;
+    		unset($filt);
     	}
-    	if ($sql_prod_filt)
+    	if ($sql_prod_filt){
     		execSQL("INSERT INTO `oc_product_filter` (`product_id`,`filter_id`) VALUES ".substr($sql_prod_filt, 0, -1).";");
-    	if ($sql_bf_filt)
+    	}
+    	if ($sql_bf_filt){
     		execSQL("INSERT INTO `oc_bf_filter` (`product_id`,`filter_group`,`filter_id`,`language_id`,`out_of_stock`)
 							VALUES ".substr($sql_bf_filt, 0, -1).";");
+    	}
+    	unset($sql_prod_filt, $sql_bf_filt);
     }
     // Создаем связку с атрибутами, если есть
     if ($prod["attrs_groups"]){
     	$sql_prod_attr = "";
     	$sql_bf_attr_val = "";
-    	if (!$prod["attrs"]) throw new Exception("undefined product attributes, but product attributes groups is exists!");
+    	if (!$prod["attrs"]) { throw new Exception("undefined product attributes, but product attributes groups is exists!"); }
     	foreach ($prod["attrs"] as $attr){
     		$sql_prod_attr .= "(".$p_id.",".$attr["attribute_id"].",1,''),";
     		$sql_bf_attr_val .= "(".$p_id.",".$attr["attribute_id"].",".$attr["attribute_value_id"].",1),";
     		$prod_attr_add_count++;
+    		unset($attr);
     	}
-    	if ($sql_prod_attr)
+    	if ($sql_prod_attr) {
     		execSQL("INSERT INTO `oc_product_attribute` (`product_id`,`attribute_id`,`language_id`,`text`) VALUES ".substr($sql_prod_attr, 0, -1).";");
-    	if ($sql_bf_attr_val)
+    	}
+    	if ($sql_bf_attr_val){
     		execSQL("INSERT INTO `oc_bf_product_attribute_value` (`product_id`,`attribute_id`,`attribute_value_id`,`language_id`)
 					VALUES ".substr($sql_bf_attr_val, 0, -1).";");
+    	}
+    	unset($sql_prod_attr, $sql_bf_attr_val);
     }
     $prods_add_count++;
+    unset($prod);
 }
 printLog(
 	"Products adding completed:
@@ -763,12 +825,13 @@ foreach ($prods2updating as $prod) {
 	execSQL("DELETE FROM `oc_product_image` WHERE `product_id`=".$p_id.";");
 	foreach ($prod["images_idxs"] as $hash_idx => $image) {
 		$image_path = IMAGE_PATH_PREFIX . $hash_idx . ".jpg";
-		if (!file_exists($IMAGES_FULL_PATH . $hash_idx . ".jpg"))
+		if (!file_exists($IMAGES_FULL_PATH . $hash_idx . ".jpg")){
 			file_put_contents(
 				$IMAGES_FULL_PATH . $hash_idx . ".jpg", 
 				file_get_contents($image["url"])
 			);
-		if ($image["is_main"])
+		}
+		if ($image["sort_order" === 0]){
 			execSQL("UPDATE `oc_product`
 				SET `quantity`=".$prod["quantity"].",
 					`stock_status_id`=".$ss_id.",
@@ -776,11 +839,12 @@ foreach ($prods2updating as $prod) {
 					`date_modified`='".date("Y-m-d H:i:s")."',
 					`image`='".$image_path."'
 				WHERE `product_id`=".$p_id.";"); 
-		else{
-	    	execSQL("INSERT INTO `oc_product_image` (`product_id`, `image`, `product_option_value_id`)
-	    		VALUES (".$p_id.", '".$image_path."', 0)");
+		} else {
+	    	execSQL("INSERT INTO `oc_product_image` (`product_id`, `image`, `product_option_value_id`, `sort_order`)
+	    		VALUES (".$p_id.", '".$image_path."', 0, ".$image["sort_order"].")");
 	    	$prod_img_add_count++;
 		}
+		unset($hash_idx, $image, $image_path);
 	}
 	// Обновляем описание товара
 	execSQL("UPDATE `oc_product_description`
@@ -800,6 +864,7 @@ foreach ($prods2updating as $prod) {
 		    );
     		$prod_cat_add_count++;
     	}
+    	unset($cat);
     // Проверяем наличие нескольких необходимых для отображения товара записей, создаем, если их нет
 	$prod2layout = execSQL("SELECT product_id FROM oc_product_to_layout WHERE `product_id`=".$p_id.";", "num_rows");
 	if (!$prod2layout){
@@ -829,7 +894,7 @@ foreach ($prods2updating as $prod) {
     $prod_opts = execSQL("SELECT option_id, product_option_id FROM oc_product_option WHERE `product_id`=".$p_id.";");
     if ($prod["opt"]) {
     	// TODO обновлять существующие свзяки oc_product_option_value, а не удалять их каждый раз и создавать заново
-    	execSQL("DELETE FROM oc_product_option_value WHERE WHERE `product_id`=".$p_id.";");
+    	execSQL("DELETE FROM oc_product_option_value WHERE `product_id`=".$p_id.";");
     	if ($prod_opts && !array_key_exists(str2idx($prod["opt"]["option_id"]), $prod_opts)){
     		execSQL("DELETE FROM oc_product_option WHERE `product_id`=".$p_id.";");
     		$prod_opts = FALSE;
@@ -847,21 +912,25 @@ foreach ($prods2updating as $prod) {
 		foreach ($prod["opt_vals"] as $opt_val){
 			$sql_prod_opt_val .= "(".$prod["opt"]["product_option_id"].",".$p_id.",".$prod["opt"]["option_id"].",".$opt_val["option_value_id"].",".$opt_val["quantity"].",1,".$opt_val["price"].",'+',0,'+',0,'+'),";
 			$prod_opt_val_add_count++;
+			unset($opt_val);
 		}
-		if ($sql_prod_opt_val)
+		if ($sql_prod_opt_val){
 			execSQL("INSERT INTO `oc_product_option_value` (`product_option_id`,`product_id`,`option_id`,`option_value_id`,
 															`quantity`,`subtract`,`price`,`price_prefix`,`points`,`points_prefix`,
 															`weight`,`weight_prefix`) VALUES ".substr($opt_val_ins_sql, 0, -1).";");
+		}
+		unset($sql_prod_opt_val);
     } else {
     	// Если же их нет, то удаляем возможные "хвосты"
     	execSQL("DELETE FROM oc_product_option WHERE product_id=".$p_id.";");
     	execSQL("DELETE FROM oc_product_option_value WHERE product_id=".$p_id.";");
     }
     // Создаем связки с фильтрами, если есть
+    execSQL("DELETE FROM oc_product_filter WHERE WHERE `product_id`=".$p_id.";");
+	execSQL("DELETE FROM oc_bf_filter WHERE WHERE `product_id`=".$p_id.";");
     if ($prod["filts_groups"]){
     	// TODO обновлять существующие свзяки c oc_product_filter и oc_bf_filter, а не удалять их каждый раз и создавать заново
-    	execSQL("DELETE FROM oc_product_filter WHERE WHERE `product_id`=".$p_id.";");
-    	execSQL("DELETE FROM oc_bf_filter WHERE WHERE `product_id`=".$p_id.";");
+    	
     	$sql_prod_filt = "";
     	$sql_bf_filt = "";
     	if (!$prod["filts"]) throw new Exception("undefined product filters, but product filters groups is exists!");
@@ -869,41 +938,45 @@ foreach ($prods2updating as $prod) {
     		$sql_prod_filt .= "(".$p_id.",".$filt["filter_id"]."),";
     		$sql_bf_filt .= "(".$p_id.",'f".$filt["filter_group_id"]."',".$filt["filter_id"].",1,0),";
     		$prod_filt_add_count++;
+    		unset($filt);
     	}
-    	if ($sql_prod_filt)
+    	if ($sql_prod_filt){
     		execSQL("INSERT INTO `oc_product_filter` (`product_id`,`filter_id`) VALUES ".substr($sql_prod_filt, 0, -1).";");
-    	if ($sql_bf_filt)
+    	}
+    	if ($sql_bf_filt){
     		execSQL("INSERT INTO `oc_bf_filter` (`product_id`,`filter_group`,`filter_id`,`language_id`,`out_of_stock`)
 							VALUES ".substr($sql_bf_filt, 0, -1).";");
+    	}
+    	unset($sql_prod_filt, $sql_bf_filt);
     } else {
     	// Если же их нет, то удаляем возможные "хвосты"
     	execSQL("DELETE FROM oc_product_filter WHERE product_id=".$p_id.";");
     	execSQL("DELETE FROM oc_bf_filter WHERE product_id=".$p_id.";");
     }
-    // Создаем связку с атрибутами, если есть
     if ($prod["attrs_groups"]){
     	// TODO обновлять существующие свзяки c oc_product_filter и oc_bf_filter, а не удалять их каждый раз и создавать заново
-    	execSQL("DELETE FROM oc_product_attribute WHERE WHERE `product_id`=".$p_id.";");
-    	execSQL("DELETE FROM oc_bf_product_attribute_value WHERE WHERE `product_id`=".$p_id.";");
+    	
     	$sql_prod_attr = "";
     	$sql_bf_attr_val = "";
-    	if (!$prod["attrs"]) throw new Exception("undefined product attributes, but product attributes groups is exists!");
+    	if (!$prod["attrs"]) { throw new Exception("undefined product attributes, but product attributes groups is exists!"); }
     	foreach ($prod["attrs"] as $attr){
     		$sql_prod_attr .= "(".$p_id.",".$attr["attribute_id"].",1,''),";
     		$sql_bf_attr_val .= "(".$p_id.",".$attr["attribute_id"].",".$attr["attribute_value_id"].",1),";
     		$prod_attr_add_count++;
+    		unset($attr);
     	}
-    	if ($sql_prod_attr)
-    		execSQL("INSERT INTO `oc_product_attribute` (`product_id`,`attribute_id`,`language_id`,`text`) VALUES ".substr($sql_prod_attr, 0, -1).";");
-    	if ($sql_bf_attr_val)
+    	if ($sql_prod_attr){
+    		execSQL("INSERT INTO `oc_product_attribute` (`product_id`,`attribute_id`,`language_id`,`text`) 
+    				 VALUES ".substr($sql_prod_attr, 0, -1).";");
+    	}
+    	if ($sql_bf_attr_val){
     		execSQL("INSERT INTO `oc_bf_product_attribute_value` (`product_id`,`attribute_id`,`attribute_value_id`,`language_id`)
-					VALUES ".substr($sql_bf_attr_val, 0, -1).";");
-    } else {
-    	// Если же их нет, то удаляем возможные "хвосты"
-    	execSQL("DELETE FROM oc_product_attribute WHERE product_id=".$p_id.";");
-    	execSQL("DELETE FROM oc_bf_product_attribute_value WHERE product_id=".$p_id.";");
+					 VALUES ".substr($sql_bf_attr_val, 0, -1).";");
+    	}
+    	unset($sql_prod_attr, $sql_bf_attr_val);
     }
 	$prod_upd_count++;
+	unset($prod);
 }
 printLog(
 	"Products updating completed:
@@ -918,6 +991,9 @@ printLog(
 	 - wrong relationship store and product in product with IDs: " . implode(", ", $prod2store_wrong) . "
 	 - wrong relationship bf filter and product in product with IDs: " . implode(", ", $prod_bf_filter_wrong)
 );
+unset($prod_upd_count,$prod_attr_add_count,$prod_filt_add_count,$prod_img_add_count,
+	  $prod_opt_add_count,$prod_opt_val_add_count,$prod_cat_add_count, 
+	  $prod2layout_wrong, $prod2store_wrong, $prod_bf_filter_wrong);
 // -=-=-=-=-=-=-=-=-=-=-=-=-
 
 printLog("Script completed by " . ((microtime(true) - $start) / 60) . " minutes");
