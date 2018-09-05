@@ -606,9 +606,13 @@ foreach ($offers_groups_idxs as $hash => $offers_group) {
     	}
     } unset($loop_idx, $offer, $article_idx);
     // Если данной группе предложений соответствует один товар, то добавляем все предложения на обновление товара
-    if (count($found_prods_idxs) === 1){
+    if (count($found_prods_idxs) === 1) {
     	reset($found_prods_idxs);
-    	$offers_groups2upd_prods[key($found_prods_idxs)] = $offers_group["offers"];
+    	$prod_id_idx = key($found_prods_idxs);
+    	$offers_groups2upd_prods[$prod_id_idx] = array_key_exists($prod_id_idx, $offers_groups2upd_prods) 
+    									 	   ? array_merge($offers_groups2upd_prods[$prod_id_idx], $offers_group["offers"])
+    									 	   : $offers_group["offers"];
+ 	    unset($prod_id_idx);
     // Если данной группе предложений не соответствует ни один товар, то конвертируем группу предложений в товар и добавляем в список товаров на добавление
     } elseif (count($found_prods_idxs) === 0){
     	$prods2adding[] = convertOffersGroup2Product($offers_group["offers"]);
@@ -896,17 +900,19 @@ foreach ($prods2updating as $prod) {
     if ($prod["opt"]) {
     	// TODO обновлять существующие свзяки oc_product_option_value, а не удалять их каждый раз и создавать заново
     	execSQL("DELETE FROM oc_product_option_value WHERE `product_id`=".$p_id.";");
+    	// Сбрасываем связку "товар <-> опция", если опция стала другой
     	if ($prod_opts && !array_key_exists(str2idx($prod["opt"]["option_id"]), $prod_opts)){
     		execSQL("DELETE FROM oc_product_option WHERE `product_id`=".$p_id.";");
     		$prod_opts = NULL;
     	}
+    	// Создаем связку "товар <-> опция", если ее нет, запоминаем product_option_id
     	if (!$prod_opts) {
         	execSQL("INSERT INTO `oc_product_option` (`product_id`,`option_id`,`value`,`required`)
     				VALUES (".$p_id.",".$prod["opt"]["option_id"].",'',1);");
         	$prod["opt"]["product_option_id"] = (string)$GLOBALS["mysqli"]->insert_id;
         	$prod_opt_add_count++;
     	} else{
-    		$prod["opt"]["product_option_id"] = $prod_opt["product_option_id"];
+    		$prod["opt"]["product_option_id"] = $prod_opts[ str2idx($prod["opt"]["option_id"]) ]["product_option_id"];
     	}
     	if (!$prod["opt_vals"]) throw new Exception("undefined 'opt_vals', but 'opt' is exists!");
     	$sql_prod_opt_val = "";
@@ -917,7 +923,7 @@ foreach ($prods2updating as $prod) {
     	if ($sql_prod_opt_val){
     		execSQL("INSERT INTO `oc_product_option_value` (`product_option_id`,`product_id`,`option_id`,`option_value_id`,
     														`quantity`,`subtract`,`price`,`price_prefix`,`points`,`points_prefix`,
-    														`weight`,`weight_prefix`) VALUES ".substr($opt_val_ins_sql, 0, -1).";");
+    														`weight`,`weight_prefix`) VALUES ".substr($sql_prod_opt_val, 0, -1).";");
     	}
     	unset($sql_prod_opt_val);
     } else {
@@ -948,6 +954,8 @@ foreach ($prods2updating as $prod) {
     	}
     	unset($sql_prod_filt, $sql_bf_filt);
     }
+    execSQL("DELETE FROM oc_product_attribute WHERE `product_id`=".$p_id.";");
+    execSQL("DELETE FROM oc_bf_product_attribute_value WHERE `product_id`=".$p_id.";");
     if ($prod["attrs_groups"]){
     	// TODO обновлять существующие свзяки c oc_product_filter и oc_bf_filter, а не удалять их каждый раз и создавать заново
     	$sql_prod_attr = "";
