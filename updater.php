@@ -241,9 +241,9 @@ $GLOBALS['attrs'] = execSQL("SELECT oca.`attribute_id` AS 'attribute_id',
     								oca.`attribute_group_id` AS 'attribute_group_id',
     								ocbav.`attribute_value_id` AS 'attribute_value_id'
     					     FROM `oc_attribute` AS oca 
-    					     LEFT JOIN `oc_attribute_description` AS ocad
-    					     LEFT JOIN `oc_bf_attribute_value` AS ocbav
-    					     ON oca.`attribute_id`=ocad.`attribute_id` WHERE ocad.`language_id`=1 AND ocbav.`language_id`=1;");
+    					     LEFT JOIN `oc_attribute_description` AS ocad ON oca.`attribute_id`=ocad.`attribute_id`
+    					     LEFT JOIN `oc_bf_attribute_value` AS ocbav ON oca.`attribute_id`=ocbav.`attribute_id`
+    					     WHERE ocad.`language_id`=1 AND ocbav.`language_id`=1;");
 $GLOBALS['attrs_idxs'] = [];
 // группировка по индексу идентификатора группы атрибутов, во избежании затирания индексов наименований атрибутов от разных групп
 foreach ($GLOBALS['attrs_groups'] as $attrs_group_id_idx => $attrs_group) {
