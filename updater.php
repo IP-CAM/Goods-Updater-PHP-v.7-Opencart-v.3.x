@@ -97,8 +97,19 @@ foreach ($yml_catalog->offers->offer as $offer) {
     	continue;
     }
     $kingsilk_offers_count++;
-    $img_url = (string)$offer->picture[0];
-    $hash = "_" . strtoupper((string)hash_file("md5", $img_url));
+    $hash = NULL;
+    $img_url = NULL;
+    // Пытаемся получить hash одной из фотографий
+    foreach ($offer->picture as $picture) {
+    	$img_url = (string)$picture;
+    	$hash = "_" . strtoupper((string)hash_file("md5", $img_url));
+    	if ($hash) { break; } 
+    } unset($picture);
+    // Если не получается пропускаем это предложение и не импортируем его
+    if (!$hash) {
+    	printLog("Product with article ".(string)$offer->article.", url: ".(string)$offer->url." hasn't pictures or received bad request from pictures urls. This product skipped and will not be imported!");
+    	continue;
+    }
     $image = new Imagick($img_url); // можно оптимизировать, перенеся создание картинки под следующий if, так как после if'a переменные не удаляются, то они будут доступны и далее
     $image->adaptiveResizeImage(32,32);
     // Если на данный момент в индексе нет идентичной картинки, то пытаемся найти похожую
