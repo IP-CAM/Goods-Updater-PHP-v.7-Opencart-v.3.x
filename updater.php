@@ -431,7 +431,7 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
     			$params[$param_idx]["values"][] = $param_value_idx;
     		}
     	} unset($param, $param_name, $param_idx, $param_value, $param_value_idx);
-    } unset($offer);
+    } unset($offer, $cat_outer, $cat_name, $cat_name_idx);
     // Если предложений несколько, то проверяем существование подходящей опции, в ее отсутствии создаем новую
     if ($diff_count) {
     	$opt_name = array_reduce($params, function($acc, $item){
