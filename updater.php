@@ -202,13 +202,13 @@ if (!$GLOBALS['kingsilk_man_id']){
     // Создание записи в таблице `oc_manufacturer`
     execSQL(
     	"INSERT INTO `oc_manufacturer` (`name`,`image`,`sort_order`)
-    	VALUES ('Кингсилк','',0);"
+    	VALUES ('Kingsilk','',0);"
     );
     $GLOBALS['kingsilk_man_id'] = (string)$GLOBALS["mysqli"]->insert_id;
     // Создание записи в таблице `oc_manufacturer_to_store`
     execSQL(
     	"INSERT INTO `oc_manufacturer_to_store` (`manufacturer_id`,`store_id`)
-    	VALUES (".$GLOBALS['kingsilk_man_id'].",0);"
+    	VALUES (".MAN_KINGSILK_ID.",0);"
     );
 }
 // Получение перечня товаров, формирование индекса по product ID и наименованию
@@ -474,10 +474,10 @@ function convertOffersGroup2Product($offers_group, $exists_prod=NULL) {
     			$cur_opt_val_name .= $cur_opt_val_name ? " / " . $param_value : $param_value;
     		}
     		// Ищем группу фильтров в общем индексе, если нет - пропускаем
-    		if (array_key_exists($param_full_idx, $GLOBALS['filts_groups_idxs']) && !(array_key_exists($param_full_idx, $prod["filts_groups"]))) {
-    			$prod["filts_groups"][$param_full_idx] = $GLOBALS['filts_groups'][$GLOBALS['filts_groups_idxs'][$param_full_idx]];
-    			$filts_group = $prod["filts_groups"][$param_full_idx];
-    			$filts_group_id_idx = $GLOBALS['filts_groups_idxs'][$param_full_idx];
+    		if (array_key_exists($param_idx, $GLOBALS['filts_groups_idxs']) && !(array_key_exists($param_idx, $prod["filts_groups"]))) {
+    			$prod["filts_groups"][$param_idx] = $GLOBALS['filts_groups'][$GLOBALS['filts_groups_idxs'][$param_idx]];
+    			$filts_group = $prod["filts_groups"][$param_idx];
+    			$filts_group_id_idx = $GLOBALS['filts_groups_idxs'][$param_idx];
     			
     			// Ищем фильтр в глобальных индексах, если нет - создаем
     			if (!array_key_exists($param_value_idx, $GLOBALS['filts_idxs'][$filts_group_id_idx])){
@@ -845,6 +845,7 @@ foreach ($prods2updating as $prod) {
     				`stock_status_id`=".(($prod["quantity"] && $prod["price"]) ? "7" : "5").",
     				`price`=".$prod["price"].",
     				`date_modified`='".date("Y-m-d H:i:s")."',
+    				`manufacturer_id`=".$GLOBALS['kingsilk_man_id'].",
     				`image`='".$image_path."'
     			WHERE `product_id`=".$p_id.";"); 
     	} else {
