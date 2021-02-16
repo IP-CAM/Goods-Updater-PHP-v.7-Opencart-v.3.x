@@ -38,17 +38,19 @@ it is necessary to accommodate changes from users.
 
 4.4 Availability of a product option suitable for the name. The name of a product option is made up of the names of differing parameters, 
 for which everything that the field `,` is discarded. If there are several different parameters, for example, ** Size ** and ** Filler 
-weight **, then they are written in one line through the separator `/`. The result is ** Filler Size / Weight **. If there is no suitable option, it is created.
+weight **, then they are written in one line through the separator `/`. The result is ** Filler Size / Weight **. 
+If there is no suitable option, it is created.
 
-4.5 Availability of option values ​​matching the parameter values. They are formed similarly to the names of options, but from the values 
-​​of different parameters. If absent, they are created.
+4.5 Availability of option values ​​matching the parameter values. They are formed similarly to the names of options, 
+but from the values ​​of different parameters. If absent, they are created.
 
-4.6 Formation of the total price, according to the principle of the lowest. Each option, in turn, has a markup calculated according to the formula * offer price - total price *.
+4.6 Formation of the total price, according to the principle of the lowest. Each option, in turn, has a markup 
+calculated according to the formula * offer price - total price *.
 
-    4.7 Formation of the total balance by aggregating the balance for all proposals. Each option, 
-    in turn, retains information about the balances specific to it.
+4.7 Formation of the total balance by aggregating the balance for all proposals. 
+Each option, in turn, retains information about the balances specific to it.
 
-    4.8 Formation of a list of photographs. Photos of all proposals are sorted out, unique ones are selected.
+4.8 Formation of a list of photographs. Photos of all proposals are sorted out, unique ones are selected.
     
 
 ## Abbreviations and definitions
