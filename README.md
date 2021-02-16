@@ -37,9 +37,10 @@ Unrecognized supplier categories and products belonging to these categories are 
 
 4.6 Formation of the total price, according to the principle of the lowest. Each option, in turn, has a markup calculated according to the formula * offer price - total price *.
 
-    4.7 Formation of the total balance by aggregating the balance for all proposals. Each option, in turn, retains information about the balances specific to it.
+4.7 Formation of the total balance by aggregating the balance for all proposals. Each option, in turn, retains information 
+about the balances specific to it.
 
-    4.8 Formation of a list of photographs. Photos of all proposals are sorted out, unique ones are selected.
+4.8 Formation of a list of photographs. Photos of all proposals are sorted out, unique ones are selected.
 
 ## Abbreviations and definitions
 - * prod * - product
