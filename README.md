@@ -48,6 +48,7 @@ weight **, then they are written in one line through the separator `/`. The resu
     4.7 Formation of the total balance by aggregating the balance for all proposals. Each option, in turn, retains information about the balances specific to it.
 
     4.8 Formation of a list of photographs. Photos of all proposals are sorted out, unique ones are selected.
+    
 
 ## Abbreviations and definitions
 - * prod * - product
